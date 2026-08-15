@@ -1,0 +1,16 @@
+[Unit]
+Description=dot-lib (self-hosted e-book reader, R2-backed)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=/usr/bin/node node_modules/.bin/tsx server/index.ts
+Environment=NODE_ENV=production HOST=127.0.0.1 NODE_OPTIONS=--max-old-space-size=256
+EnvironmentFile=@DIR@/.env
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

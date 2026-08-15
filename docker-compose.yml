@@ -1,0 +1,14 @@
+services:
+  dot-lib:
+    build: .
+    container_name: dot-lib
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8787}:8787"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/books"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
