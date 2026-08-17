@@ -212,20 +212,38 @@ button {
 .format-tag.format-azw3,
 .format-tag.format-prc { background: rgba(185, 138, 47, 0.88); }
 
-.progress-ribbon {
-  position: absolute;
-  left: 7px;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.18);
-  z-index: 2;
+/* 封面下方的阅读进度：细条 + 文字 */
+.read-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: -0.15rem;
 }
-.progress-ribbon i {
+.read-progress .bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.read-progress .bar i {
   display: block;
   height: 100%;
+  border-radius: inherit;
   background: var(--gold);
+  transition: width 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+.read-progress .pct {
+  flex: none;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.4em;
+  text-align: right;
+}
+.read-progress.done .bar i { background: var(--vermilion); }
+.read-progress.done .pct { color: var(--vermilion); }
 
 .book-card .meta .title {
   font-size: 0.92rem;

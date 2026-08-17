@@ -181,6 +181,21 @@ export async function renderLibrary(root: HTMLElement): Promise<() => void> {
         }
       })
     );
+
+    // fill progress rows lazily (one request per book, fire-and-forget)
+    shelf.querySelectorAll<HTMLElement>("[data-progress]").forEach(async (el) => {
+      try {
+        const p = await api.getProgress(el.dataset.progress!);
+        const pct = Math.round((p.percentage || 0) * 100);
+        const started = pct > 0 || !!p.cfi || p.page > 0;
+        el.querySelector<HTMLElement>(".bar i")!.style.width = `${pct}%`;
+        el.querySelector<HTMLElement>(".pct")!.textContent =
+          pct >= 99 ? "读完" : started ? `读至 ${pct}%` : "未读";
+        el.classList.toggle("done", pct >= 99);
+      } catch {
+        /* ignore */
+      }
+    });
   }
 
   function cardHtml(b: BookMeta): string {
@@ -194,7 +209,10 @@ export async function renderLibrary(root: HTMLElement): Promise<() => void> {
           <span class="format-tag format-${b.sourceFormat ?? b.format}">${(
             b.sourceFormat ?? b.format
           ).toUpperCase()}</span>
-          <div class="progress-ribbon"><i data-progress="${b.id}" style="width:0"></i></div>
+        </div>
+        <div class="read-progress" data-progress="${b.id}">
+          <div class="bar"><i style="width:0"></i></div>
+          <span class="pct"></span>
         </div>
         <div class="meta">
           <div class="title">${escapeHtml(b.title)}</div>
@@ -208,16 +226,6 @@ export async function renderLibrary(root: HTMLElement): Promise<() => void> {
   }
 
   await refresh();
-
-  // fill progress ribbons lazily (one request per book, fire-and-forget)
-  shelf.querySelectorAll<HTMLElement>("[data-progress]").forEach(async (el) => {
-    try {
-      const p = await api.getProgress(el.dataset.progress!);
-      el.style.width = `${Math.round((p.percentage || 0) * 100)}%`;
-    } catch {
-      /* ignore */
-    }
-  });
 
   return () => {
     window.removeEventListener("dragover", onDragOver);
