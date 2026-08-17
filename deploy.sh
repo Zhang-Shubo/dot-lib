@@ -16,7 +16,7 @@
 set -euo pipefail
 
 DEPLOY_HOST="${DEPLOY_HOST:?set DEPLOY_HOST, e.g. DEPLOY_HOST=ubuntu@1.2.3.4 ./deploy.sh}"
-DEPLOY_PATH="${DEPLOY_PATH:-dot-lib}"   # relative paths are under the remote home
+DEPLOY_PATH="${DEPLOY_PATH:-.awesome-agent/projects/dot-lib}"   # relative paths are under the remote home
 SERVICE="${SERVICE:-dot-lib}"
 
 echo "==> Building locally"
