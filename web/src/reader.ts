@@ -62,6 +62,7 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
           <div class="loading" id="loading">书页展开中 …</div>
           <div id="viewer"></div>
         </div>
+        <div class="rail-mask" id="rail-mask"></div>
         <aside class="note-rail" id="note-rail">
           <div class="rail-resizer" id="rail-resizer" title="拖动调整宽度"></div>
           <div class="rail-head">
@@ -250,6 +251,14 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
     readerBody.classList.toggle("rail-hidden");
     $("#toggle-rail").classList.toggle("active", !readerBody.classList.contains("rail-hidden"));
   });
+
+  // 手机(≤900px):笔记栏是盖在正文上的右侧抽屉,进入先收起免得挡住正文;点遮罩空白收回
+  const closeRail = () => {
+    readerBody.classList.add("rail-hidden");
+    $("#toggle-rail").classList.remove("active");
+  };
+  if (window.matchMedia("(max-width: 900px)").matches) closeRail();
+  $("#rail-mask").addEventListener("click", closeRail);
 
   // draggable divider between text and notes
   {

@@ -814,19 +814,38 @@ button {
 .reader.theme-dark .settings .chip.active,
 .reader.theme-slate .settings .chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
+/* 手机遮罩:笔记抽屉开着时盖在正文上,点它收回(桌面不渲染) */
+.rail-mask { display: none; }
+
 @media (max-width: 900px) {
   .reader-body { grid-template-columns: 1fr 0px !important; }
   .rail-resizer { display: none; }
-  .reader-body:not(.rail-hidden) .note-rail {
+  /* 笔记栏 → 右侧抽屉:3/4 屏宽,平移滑入滑出;常驻可见性交给 transform,滑出动画才完整 */
+  .note-rail {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(360px, 92vw);
+    width: 75vw;
     visibility: visible;
     box-shadow: -24px 0 48px -24px rgba(42, 37, 29, 0.4);
     z-index: 25;
+    transform: translateX(105%);
+    transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
+  .reader-body.rail-hidden .note-rail { visibility: visible; }
+  .reader-body:not(.rail-hidden) .note-rail { transform: none; }
+  .rail-mask {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 24;
+    background: rgba(26, 22, 16, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .reader-body:not(.rail-hidden) .rail-mask { opacity: 1; pointer-events: auto; }
 }
 
 @media (max-width: 640px) {
