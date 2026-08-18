@@ -285,6 +285,48 @@ app.put("/api/books/:id/progress", async (c) => {
   return c.json(p);
 });
 
+// ---- panel widget ----
+//
+// awesome-agent 面板小组件数据端点(契约见其 docs/07): {ok, items:[{text,url,time}]}。
+// 取最近有阅读动静的 3 本书,口径与书架一致(读完 / 读至 N% / 未读)。
+// 面板服务端 60s 缓存,这里每次现算即可。
+
+const SITE_BASE = process.env.PUBLIC_BASE || "https://books.ericz.info";
+
+app.get("/api/widget", async (c) => {
+  try {
+    const keys = await listKeys("books/");
+    const ids = keys.filter((k) => k.endsWith("/progress.json")).map((k) => k.split("/")[1]);
+    const rows = (
+      await Promise.all(
+        ids.map(async (id) => {
+          const [p, m] = await Promise.all([
+            getJson<Progress>(progressKey(id)),
+            getJson<BookMeta>(metaKey(id)),
+          ]);
+          return p && m ? { p, m } : null;
+        })
+      )
+    ).filter((r): r is { p: Progress; m: BookMeta } => r !== null);
+    const items = rows
+      .sort((a, b) => (b.p.updatedAt || "").localeCompare(a.p.updatedAt || ""))
+      .slice(0, 3)
+      .map(({ p, m }) => {
+        const pct = Math.round((p.percentage || 0) * 100);
+        const started = pct > 0 || !!p.cfi || p.page > 0;
+        const state = pct >= 99 ? "读完" : started ? `读至 ${pct}%` : "未读";
+        return {
+          text: `《${m.title}》${state}`,
+          url: `${SITE_BASE}/#/read/${m.id}`,
+          time: p.updatedAt || "",
+        };
+      });
+    return c.json({ ok: true, items });
+  } catch (err) {
+    return c.json({ ok: false, error: String((err as Error).message || err) });
+  }
+});
+
 // ---- static frontend (production build) ----
 
 // hashed assets can be cached forever, pdf.js runtime data (cmaps/fonts/wasm)
