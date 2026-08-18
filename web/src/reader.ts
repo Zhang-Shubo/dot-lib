@@ -151,12 +151,9 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
   // offset: huge look-ahead so every section renders once and stays mounted;
   // epub.js's lazy prepend/unload is buggy when scrolling backwards (blank
   // spacer views + wrong scroll compensation), rendering everything avoids it.
-  // 手机(≤900px)开 fullsize:epub.js 用 window 而非容器滚动,正文滚的是页面本身,
-  // 浏览器工具栏才会随滚动收起(fixed 满屏 + 容器内滚动会堵死这个系统行为)
-  const docScroll = window.matchMedia("(max-width: 900px)").matches;
   const rendition: Rendition = book.renderTo($("#viewer"), {
     width: "100%",
-    ...(docScroll ? { fullsize: true } : { height: "100%" }),
+    height: "100%",
     flow: "scrolled",
     manager: "continuous",
     offset: 10_000_000,
@@ -198,31 +195,6 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
     displayed.then(finish, finish);
   });
   $("#loading")?.remove();
-
-  // fullsize(手机文档级滚动)下各章节高度陆续落定,首次按 cfi 的定位会被上方章节
-  // 撑开顶走——等文档高度稳定且用户还没自己滚动时,补一次精确定位
-  if (docScroll && progress.cfi) {
-    let userScrolled = false;
-    const mark = () => { userScrolled = true; };
-    window.addEventListener("wheel", mark, { once: true, passive: true });
-    window.addEventListener("touchstart", mark, { once: true, passive: true });
-    let lastH = -1;
-    const settle = setInterval(() => {
-      const h = document.documentElement.scrollHeight;
-      if (h === lastH) {
-        clearInterval(settle);
-        window.removeEventListener("wheel", mark);
-        window.removeEventListener("touchstart", mark);
-        if (!userScrolled) rendition.display(progress.cfi).catch(() => {});
-      }
-      lastH = h;
-    }, 700);
-    disposers.push(() => {
-      clearInterval(settle);
-      window.removeEventListener("wheel", mark);
-      window.removeEventListener("touchstart", mark);
-    });
-  }
 
   book.ready.then(() => book.locations.generate(1600)).catch(() => {});
 
@@ -358,9 +330,7 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
   // ---- progress / current chapter ----
   let currentHref = "";
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  type Loc = { start: { cfi: string; percentage: number; href: string } };
-  const applyLocation = (loc: Loc) => {
-    if (!loc?.start?.cfi) return;
+  rendition.on("relocated", (loc: { start: { cfi: string; percentage: number; href: string } }) => {
     const pct = Math.round((loc.start.percentage || 0) * 100);
     $("#pct").textContent = `${pct}%`;
     $("#pct-bar").style.width = `${pct}%`;
@@ -375,25 +345,7 @@ async function renderEpubReader(root: HTMLElement, meta: BookMeta): Promise<() =
         .saveProgress(bookId, { cfi: loc.start.cfi, percentage: loc.start.percentage || 0 })
         .catch(() => {});
     }, 800);
-  };
-  rendition.on("relocated", applyLocation);
-  // fullsize(手机文档级滚动)下 epub.js 的 window 滚动→relocated 事件链失灵,
-  // 自己听窗口滚动、主动取 currentLocation 喂同一套逻辑(计算路径本身是好的)
-  if (docScroll) {
-    let locTimer: ReturnType<typeof setTimeout> | undefined;
-    const onWinScroll = () => {
-      clearTimeout(locTimer);
-      locTimer = setTimeout(() => {
-        const cur = (rendition as unknown as { currentLocation: () => Loc | Promise<Loc> }).currentLocation();
-        Promise.resolve(cur).then(applyLocation).catch(() => {});
-      }, 250);
-    };
-    window.addEventListener("scroll", onWinScroll, { passive: true });
-    disposers.push(() => {
-      window.removeEventListener("scroll", onWinScroll);
-      clearTimeout(locTimer);
-    });
-  }
+  });
 
   // keyboard scrolling of the text pane
   const scrollContainer = (): HTMLElement | null => root.querySelector(".epub-container");
