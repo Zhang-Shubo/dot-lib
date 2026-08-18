@@ -818,11 +818,34 @@ button {
 .rail-mask { display: none; }
 
 @media (max-width: 900px) {
-  .reader-body { grid-template-columns: 1fr 0px !important; }
+  /* 文档级滚动:阅读器不再 fixed 满屏,正文滚的是页面本身——浏览器工具栏才会随滚动
+     收起(容器内滚动在 iOS 26 上收不起来)。顶栏 sticky,底部进度条 fixed 悬浮,
+     各浮层(笔记抽屉/遮罩/目录/设置)改 fixed 钉在视口上 */
+  .reader {
+    position: static;
+    min-height: 100dvh;
+    padding-bottom: calc(44px + env(safe-area-inset-bottom));
+  }
+  .reader-top { position: sticky; top: 0; }
+  .reader-body { display: block; }
+  .text-pane { min-height: 60dvh; }
+  #viewer { position: static; }
+  .pdf-scroll { height: auto; overflow: visible; padding: 18px 12px 24px; }
+  .reader-foot {
+    position: fixed;
+    left: 0; right: 0; bottom: 0; z-index: 20;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    padding-bottom: calc(0.55rem + env(safe-area-inset-bottom));
+  }
+  .drawer { position: fixed; }
+  .settings { position: fixed; top: 60px; }
+  .rail-mask { position: fixed; }
   .rail-resizer { display: none; }
   /* 笔记栏 → 右侧抽屉:3/4 屏宽,平移滑入滑出;常驻可见性交给 transform,滑出动画才完整 */
   .note-rail {
-    position: absolute;
+    position: fixed;
     top: 0;
     right: 0;
     bottom: 0;

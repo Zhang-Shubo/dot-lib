@@ -85,6 +85,15 @@ export async function renderPdfReader(root: HTMLElement, meta: BookMeta): Promis
   const readerBody = $("#reader-body");
   const scroller = $("#pdf-scroll");
   const railScroll = $("#rail-scroll");
+  // 手机(≤900px)用文档级滚动:正文滚的是页面本身,浏览器工具栏才会随滚动收起
+  // (fixed 满屏 + 容器内滚动会堵死这个系统行为);滚动读写经这组适配器,坐标系仍以 scroller 为原点
+  const docScroll = window.matchMedia("(max-width: 900px)").matches;
+  const scrollerDocTop = () => scroller.getBoundingClientRect().top + window.scrollY;
+  const getScrollTop = () => (docScroll ? window.scrollY - scrollerDocTop() : scroller.scrollTop);
+  const setScrollTop = (v: number) => {
+    if (docScroll) window.scrollTo(0, v + scrollerDocTop());
+    else scroller.scrollTop = v;
+  };
   const disposers: Array<() => void> = [];
   let destroyed = false;
 
@@ -208,7 +217,7 @@ export async function renderPdfReader(root: HTMLElement, meta: BookMeta): Promis
 
   /** Where we are now, as a page number plus a fraction of that page. */
   function position(): { page: number; frac: number } {
-    const top = scroller.scrollTop;
+    const top = getScrollTop();
     let lo = 0;
     let hi = slots.length - 1;
     while (lo < hi) {
@@ -225,7 +234,7 @@ export async function renderPdfReader(root: HTMLElement, meta: BookMeta): Promis
   function scrollToPosition(page: number, frac = 0): void {
     const slot = slots[Math.min(Math.max(page, 1), total) - 1];
     if (!slot) return;
-    scroller.scrollTop = slot.el.offsetTop + frac * (slot.el.offsetHeight + PAGE_GAP);
+    setScrollTop(slot.el.offsetTop + frac * (slot.el.offsetHeight + PAGE_GAP));
   }
 
   layout();
@@ -318,7 +327,7 @@ export async function renderPdfReader(root: HTMLElement, meta: BookMeta): Promis
         }
       }
     },
-    { root: scroller, rootMargin: `${PRERENDER} 0px` }
+    { root: docScroll ? null : scroller, rootMargin: `${PRERENDER} 0px` }
   );
   slots.forEach((s) => observer.observe(s.el));
   disposers.push(() => observer.disconnect());
@@ -386,9 +395,10 @@ export async function renderPdfReader(root: HTMLElement, meta: BookMeta): Promis
       }, 800);
     });
   }
-  scroller.addEventListener("scroll", onScroll, { passive: true });
+  const scrollHost: EventTarget = docScroll ? window : scroller;
+  scrollHost.addEventListener("scroll", onScroll, { passive: true });
   disposers.push(() => {
-    scroller.removeEventListener("scroll", onScroll);
+    scrollHost.removeEventListener("scroll", onScroll);
     clearTimeout(saveTimer);
   });
   onScroll();
