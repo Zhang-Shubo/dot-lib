@@ -1,5 +1,5 @@
 [Unit]
-Description=dot-lib (self-hosted e-book reader, R2-backed)
+Description=dot-lib (self-hosted e-book reader, S3/R2-backed)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,6 +9,9 @@ WorkingDirectory=@DIR@
 ExecStart=/usr/bin/node node_modules/.bin/tsx server/index.ts
 Environment=NODE_ENV=production HOST=127.0.0.1 NODE_OPTIONS=--max-old-space-size=256
 EnvironmentFile=@DIR@/.env
+# Written by ai-space from space.yaml: BLOB_URL + S3_* (see ai-space docs/storage.md).
+# Optional so the unit still starts from the legacy R2_* variables in .env.
+EnvironmentFile=-@HOME@/.ai-space/data/dot-lib/space.env
 Restart=on-failure
 RestartSec=5s
 

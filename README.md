@@ -1,6 +1,6 @@
 # 点·藏书 dot-lib
 
-自托管电子书阅读器。TypeScript 全栈，图书文件、封面、划线笔记、阅读进度全部存储在 Cloudflare R2，服务器本身无状态，无需数据库。
+自托管电子书阅读器。TypeScript 全栈，图书文件、封面、划线笔记、阅读进度全部存储在对象存储（Cloudflare R2 或任意 S3 兼容服务），服务器本身无状态，无需数据库。桶和凭证由 [ai-space](https://github.com/Zhang-Shubo/ai-space) 的存储组件按 `space.yaml` 的声明供给，也可以脱离 ai-space 用 `R2_*` 变量单独跑。
 
 ## 功能
 
@@ -20,7 +20,7 @@
 | --- | --- |
 | 后端 | Node 22 + Hono + @aws-sdk/client-s3（R2 S3 兼容 API） |
 | 前端 | Vite + 原生 TypeScript + epub.js + pdf.js + mobi.js（vendor 自 foliate-js） |
-| 存储 | Cloudflare R2：`books/{id}/book.epub`（或 `book.pdf`）+ `meta.json` + `cover` + `highlights.json` + `progress.json` |
+| 存储 | S3 兼容对象存储（Cloudflare R2）：`books/{id}/book.epub`（或 `book.pdf`）+ `meta.json` + `cover` + `highlights.json` + `progress.json`；桶、前缀、凭证来自 ai-space 写的 `space.env`（`BLOB_URL` + `S3_*`），或独立部署时的 `R2_*` |
 | 部署 | Docker + docker compose + `deploy.sh`（rsync 到服务器） |
 
 pdf.js 运行时需要的 CMap（中日韩预定义编码）、标准字体、wasm 解码器由 `web/vite.config.ts` 里的 `pdfjs-assets` 插件提供：开发时直接从 node_modules 走中间件，构建时复制到 `dist/client/pdfjs/`。
@@ -33,10 +33,29 @@ Kindle 格式没有单独的阅读器，导入时在浏览器里转换成 EPUB �
 
 解析器 `web/src/vendor/mobi.js` 逐字 vendor 自 [foliate-js](https://github.com/johnfactotum/foliate-js)（MIT，零依赖单文件）——npm 上那个 `foliate-js` 包是第三方账号转发布的，没有走。
 
+## 存储：接入 ai-space
+
+`space.yaml` 向 ai-space 声明一个 S3 后端的 blob store（`prefix: ""`，沿用桶里已有的 `books/...` 布局，桶名取 ai-space 的 `SPACE_S3_BUCKET`）。ai-space 同步时用工作区 `.env` 里的 `SPACE_S3_*` 凭证探一次桶，然后把下面这些写进 `~/.ai-space/data/dot-lib/space.env`（mode 600）：
+
+```
+BLOB_URL=s3://<bucket>/
+S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_BUCKET=<bucket>
+S3_ACCESS_KEY_ID=…
+S3_SECRET_ACCESS_KEY=…
+```
+
+`server/r2.ts` 优先读 `BLOB_URL` + `S3_*`（`BLOB_URL` 里的前缀会自动加到每个 key 前面），没有时退回 `R2_*`。所以：
+
+- 服务器上：systemd unit 多一行 `EnvironmentFile=-~/.ai-space/data/dot-lib/space.env`，本机 `.env` 只需要 `PORT`。让 ai-space 认领这个 app：把部署目录加进 ai-space 的 `SPACE_APPS`，或者直接部署到 `~/.ai-space/apps/dot-lib`。
+- 本地开发：`eval "$(bun <ai-space>/src/index.ts env dot-lib)"` 把变量导入当前 shell，再 `npm run dev`。
+- 脱离 ai-space：照旧在 `.env` 里填 `R2_*`（见 `.env.example`）。
+
 ## 本地开发
 
 ```bash
-cp .env.example .env   # 填入 R2 凭证
+cp .env.example .env   # 填入 R2 凭证（或者用上面的 ai-space env 命令）
 npm install
 npm run dev            # 后端 :8787，前端 :5173（代理 /api）
 ```
@@ -45,7 +64,7 @@ npm run dev            # 后端 :8787，前端 :5173（代理 /api）
 
 R2 凭证获取：Cloudflare 控制台 → R2 → 创建存储桶 → Manage R2 API Tokens → 创建具有该桶读写权限的 Token，得到 Access Key ID / Secret；Account ID 在 R2 概览页右侧。
 
-没有 R2 时也可以设 `R2_ENDPOINT` 指向任意 S3 兼容存储（如 MinIO）进行本地开发。
+没有 R2 时也可以设 `R2_ENDPOINT`（或 ai-space 的 `SPACE_S3_ENDPOINT`）指向任意 S3 兼容存储（如 MinIO）进行本地开发。
 
 ## 部署到服务器
 
@@ -57,6 +76,8 @@ DEPLOY_HOST=ubuntu@your-server ./deploy.sh
 ```
 
 脚本做的事：本地 `npm run build` → rsync（排除 `node_modules` / `.env` / `.git`）→ 首次部署把本地 `.env` 播种上去（已存在则保留）→ 远端 `npm install --omit=dev` → 首次部署从 `deploy/dot-lib.service` 安装并 enable systemd unit → 重启服务 → 健康检查 `/api/books`。
+
+unit 只在首次部署安装；`deploy/dot-lib.service` 改过之后（比如加了 ai-space 的 `EnvironmentFile`），要手动重装：把文件里的 `@USER@` / `@DIR@` / `@HOME@` 替换后 `sudo tee /etc/systemd/system/dot-lib.service`，再 `sudo systemctl daemon-reload && sudo systemctl restart dot-lib`。
 
 服务默认只监听 `127.0.0.1:8787`（unit 里的 `HOST=127.0.0.1`），公网访问需要自己在前面加一层：Cloudflare Tunnel、Nginx/Caddy 均可，顺便解决 HTTPS 与登录（本应用自身不带鉴权）。
 

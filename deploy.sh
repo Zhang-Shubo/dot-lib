@@ -13,6 +13,13 @@
 #
 # The server-side .env is NOT overwritten if it already exists; on first
 # deploy it is seeded from your local .env (which must exist).
+#
+# Object storage: when the server runs ai-space, declare the bucket in
+# space.yaml and let ai-space write BLOB_URL + S3_* into
+# ~/.ai-space/data/dot-lib/space.env (the unit loads it). Then .env only needs
+# PORT. Without ai-space the R2_* variables in .env keep working.
+# The unit file is only installed on the first deploy; after changing
+# deploy/dot-lib.service, re-install it by hand (see README).
 set -euo pipefail
 
 DEPLOY_HOST="${DEPLOY_HOST:?set DEPLOY_HOST, e.g. DEPLOY_HOST=ubuntu@1.2.3.4 ./deploy.sh}"
@@ -49,7 +56,8 @@ else
   echo "==> Installing systemd unit ${SERVICE}.service"
   remote_user=$(ssh "$DEPLOY_HOST" "whoami")
   remote_dir=$(ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && pwd")
-  sed -e "s|@USER@|${remote_user}|g" -e "s|@DIR@|${remote_dir}|g" deploy/dot-lib.service |
+  remote_home=$(ssh "$DEPLOY_HOST" 'echo "$HOME"')
+  sed -e "s|@USER@|${remote_user}|g" -e "s|@DIR@|${remote_dir}|g" -e "s|@HOME@|${remote_home}|g" deploy/dot-lib.service |
     ssh "$DEPLOY_HOST" "sudo tee /etc/systemd/system/${SERVICE}.service >/dev/null"
   ssh "$DEPLOY_HOST" "sudo systemctl daemon-reload && sudo systemctl enable '${SERVICE}'"
 fi
