@@ -21,7 +21,7 @@
 | 后端 | Node 22 + Hono + @aws-sdk/client-s3（R2 S3 兼容 API） |
 | 前端 | Vite + 原生 TypeScript + epub.js + pdf.js + mobi.js（vendor 自 foliate-js） |
 | 存储 | S3 兼容对象存储（Cloudflare R2）：`books/{id}/book.epub`（或 `book.pdf`）+ `meta.json` + `cover` + `highlights.json` + `progress.json`；桶、前缀、凭证来自 ai-space 写的 `space.env`（`BLOB_URL` + `S3_*`），或独立部署时的 `R2_*` |
-| 部署 | Docker + docker compose + `deploy.sh`（rsync 到服务器） |
+| 部署 | `deploy.sh`（rsync 到服务器 + 用户级 systemd，免 sudo）；Docker + docker compose 为备选 |
 
 pdf.js 运行时需要的 CMap（中日韩预定义编码）、标准字体、wasm 解码器由 `web/vite.config.ts` 里的 `pdfjs-assets` 插件提供：开发时直接从 node_modules 走中间件，构建时复制到 `dist/client/pdfjs/`。
 
@@ -32,6 +32,16 @@ Kindle 格式没有单独的阅读器，导入时在浏览器里转换成 EPUB �
 服务器只保存转换后的 EPUB，`meta.json` 里用 `sourceFormat` 记住原始格式（书架角标据此显示 MOBI / AZW3）。原始文件不上传，仍在你自己的磁盘上。
 
 解析器 `web/src/vendor/mobi.js` 逐字 vendor 自 [foliate-js](https://github.com/johnfactotum/foliate-js)（MIT，零依赖单文件）——npm 上那个 `foliate-js` 包是第三方账号转发布的，没有走。
+
+## 作为 ai-space app
+
+本仓库是一个 [ai-space](https://github.com/Zhang-Shubo/ai-space) app，遵循其 `docs/app-spec.md`（spec 1）：一 app 一仓库、名字四处相同（目录 / 仓库 / `space.yaml` / systemd 单元都是 `dot-lib`）、配置只走环境变量、服务只监听 127.0.0.1、要什么都在 `space.yaml` 里声明。`space.yaml` 里声明了三样东西：
+
+- `service`：常驻服务，端口 8787，健康检查 `GET /healthz`（不碰对象存储，只回答进程活着）；
+- `widgets`：一张「在读」卡片，数据来自 `GET /api/widget`，契约 `{ok, items:[{text,url,time}]}`，面板服务端代理并缓存 60s；
+- `storage.blobs`：一个 S3 后端的 blob store，见下节。
+
+给 AI 助手和新接手者的工程说明在 [AGENTS.md](AGENTS.md)。
 
 ## 存储：接入 ai-space
 
@@ -48,7 +58,7 @@ S3_SECRET_ACCESS_KEY=…
 
 `server/r2.ts` 优先读 `BLOB_URL` + `S3_*`（`BLOB_URL` 里的前缀会自动加到每个 key 前面），没有时退回 `R2_*`。所以：
 
-- 服务器上：systemd unit 多一行 `EnvironmentFile=-~/.ai-space/data/dot-lib/space.env`，本机 `.env` 只需要 `PORT`。让 ai-space 认领这个 app：把部署目录加进 ai-space 的 `SPACE_APPS`，或者直接部署到 `~/.ai-space/apps/dot-lib`。
+- 服务器上：systemd unit 多一行 `EnvironmentFile=-%h/.ai-space/data/dot-lib/space.env`，本机 `.env` 只需要 `PORT`。`deploy.sh` 默认部署到 `~/.ai-space/apps/dot-lib`，ai-space 自动认领；部署到别处则把目录加进 ai-space 的 `SPACE_APPS`。
 - 本地开发：`eval "$(bun <ai-space>/src/index.ts env dot-lib)"` 把变量导入当前 shell，再 `npm run dev`。
 - 脱离 ai-space：照旧在 `.env` 里填 `R2_*`（见 `.env.example`）。
 
@@ -68,25 +78,27 @@ R2 凭证获取：Cloudflare 控制台 → R2 → 创建存储桶 → Manage R2 
 
 ## 部署到服务器
 
-服务器需要 Node 22+，以及 systemctl 的免密 sudo。前端在本地构建后连同 `dist/` 一起同步过去——epub.js 和 pdf.js 都是 devDependency，构建产物里已经打包完毕，服务器不跑 vite，只装运行时依赖，1～2GB 内存的小机器也扛得住。
+服务器需要 Node 22+（`/usr/bin/node`）和一个用户级 systemd 会话，不需要 sudo。前端在本地构建后连同 `dist/` 一起同步过去——epub.js 和 pdf.js 都是 devDependency，构建产物里已经打包完毕，服务器不跑 vite，只装运行时依赖，1～2GB 内存的小机器也扛得住。
 
 ```bash
 DEPLOY_HOST=ubuntu@your-server ./deploy.sh
-# 可选：DEPLOY_PATH=dot-lib（默认，相对远端 home）、SERVICE=dot-lib（systemd 服务名）
+# 可选：DEPLOY_PATH=.ai-space/apps/dot-lib（默认，相对远端 home）、SERVICE=dot-lib（systemd 单元名）
 ```
 
-脚本做的事：本地 `npm run build` → rsync（排除 `node_modules` / `.env` / `.git`）→ 首次部署把本地 `.env` 播种上去（已存在则保留）→ 远端 `npm install --omit=dev` → 首次部署从 `deploy/dot-lib.service` 安装并 enable systemd unit → 重启服务 → 健康检查 `/api/books`。
+脚本做的事：本地 `npm run build` → rsync（排除 `node_modules` / `.env` / `.git`）→ 首次部署把本地 `.env` 播种上去（已存在则保留）→ 远端 `npm install --omit=dev` → 把 `deploy/dot-lib.service` 装到 `~/.config/systemd/user/`（每次部署都重装，改了 unit 不用手动操作）→ `loginctl enable-linger` + `systemctl --user enable` → 重启 → 健康检查 `/healthz`。
 
-unit 只在首次部署安装；`deploy/dot-lib.service` 改过之后（比如加了 ai-space 的 `EnvironmentFile`），要手动重装：把文件里的 `@USER@` / `@DIR@` / `@HOME@` 替换后 `sudo tee /etc/systemd/system/dot-lib.service`，再 `sudo systemctl daemon-reload && sudo systemctl restart dot-lib`。
+服务只监听 `127.0.0.1:8787`（代码默认值，unit 里再显式给一次），公网访问由前面的一层负责：Cloudflare Tunnel、Nginx/Caddy 均可，顺便解决 HTTPS 与登录（本应用自身不带鉴权）。
 
-服务默认只监听 `127.0.0.1:8787`（unit 里的 `HOST=127.0.0.1`），公网访问需要自己在前面加一层：Cloudflare Tunnel、Nginx/Caddy 均可，顺便解决 HTTPS 与登录（本应用自身不带鉴权）。
+从旧的系统级 unit（`/etc/systemd/system/dot-lib.service`，部署目录在 `~/.awesome-agent/projects/dot-lib`）迁移：先 `sudo systemctl disable --now dot-lib && sudo rm /etc/systemd/system/dot-lib.service && sudo systemctl daemon-reload`，把旧目录的 `.env` 拷到 `~/.ai-space/apps/dot-lib/.env`（只留 `PORT`，桶和凭证由 ai-space 的 `space.env` 供给），再跑一次 `deploy.sh`。
 
-仓库里的 `Dockerfile` / `docker-compose.yml` 是另一套可选方案，当前部署没有使用。
+仓库里的 `Dockerfile` / `docker-compose.yml` 是另一套可选方案，当前部署没有使用；镜像里 `HOST=0.0.0.0`，端口由容器运行时发布。
 
 ## API
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| GET | `/healthz` | 存活检查，`{ok:true}`，不碰对象存储 |
+| GET | `/api/widget` | 面板小组件：最近有阅读动静的 3 本书，`{ok, items:[{text,url,time}]}` |
 | GET | `/api/books` | 图书列表 |
 | GET | `/api/books/:id` | 单本图书信息 |
 | POST | `/api/books` | 小文件一次性上传（multipart：file, title, author, cover, format） |

@@ -1,4 +1,4 @@
-# ai-space 应用清单(见 ai-space docs/storage.md)。
+# ai-space app manifest. Contract: ai-space docs/app-spec.md (spec 1).
 #
 # 存储声明: 书文件、封面、划线、进度都是对象存储里的对象, 由 ai-space 认领并交接——
 # sync 时用工作区 .env 里的 SPACE_S3_* 凭证探一次桶, 然后把 BLOB_URL 和 S3_* 写进
@@ -7,7 +7,29 @@
 # 桶名不写在这里, 沿用 ai-space 的 SPACE_S3_BUCKET; prefix 留空是因为库里已有
 # books/<id>/... 的布局, 保持原样, 不再套一层 dot-lib/ 前缀。
 
+spec: 1
 name: dot-lib
+title: 点·藏书
+description: 自托管电子书阅读器：上传 EPUB / PDF / MOBI，在浏览器里阅读、划线、记笔记，数据全部存在对象存储里。
+icon: web/public/favicon.svg
+status: active
+repo: https://github.com/Zhang-Shubo/dot-lib.git
+
+# 常驻服务。ai-space 传入 PORT, 进程只绑 127.0.0.1; /healthz 不碰对象存储。
+service:
+  command: node node_modules/.bin/tsx server/index.ts
+  port: 8787
+  health: /healthz
+
+# 面板小组件: 最近有阅读动静的 3 本书。契约 {ok, items:[{text,url,time}]}。
+widgets:
+  - name: reading
+    title: 点·藏书 · 在读
+    kind: items
+    source: /api/widget
+    link: /
+    size: 2x1
+    refresh: 60s
 
 storage:
   blobs:

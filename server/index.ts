@@ -21,6 +21,10 @@ import type { BookFormat, BookMeta, Highlight, Progress, Rect } from "./types.js
 const app = new Hono();
 app.use(logger());
 
+// Liveness for ai-space and deploy.sh. Deliberately does not touch object
+// storage: "the process is up" and "the bucket answers" are different questions.
+app.get("/healthz", (c) => c.json({ ok: true }));
+
 const metaKey = (id: string) => `books/${id}/meta.json`;
 const fileKey = (id: string, format: BookFormat) => `books/${id}/book.${format}`;
 const coverKey = (id: string) => `books/${id}/cover`;
@@ -287,7 +291,7 @@ app.put("/api/books/:id/progress", async (c) => {
 
 // ---- panel widget ----
 //
-// awesome-agent 面板小组件数据端点(契约见其 docs/07): {ok, items:[{text,url,time}]}。
+// ai-space 面板小组件数据端点(契约见 ai-space docs/app-spec.md, widgets/items): {ok, items:[{text,url,time}]}。
 // 取最近有阅读动静的 3 本书,口径与书架一致(读完 / 读至 N% / 未读)。
 // 面板服务端 60s 缓存,这里每次现算即可。
 
@@ -343,8 +347,21 @@ app.use("/*", async (c, next) => {
 app.use("/*", serveStatic({ root: "./dist/client" }));
 app.get("*", serveStatic({ path: "./dist/client/index.html" }));
 
+// Loopback by default (ai-space app rule 4): exposure is the space's job. Docker
+// sets HOST=0.0.0.0 in the image because the port is published by the runtime.
 const port = Number(process.env.PORT || 8787);
-const hostname = process.env.HOST || "0.0.0.0";
-serve({ fetch: app.fetch, port, hostname }, (info) => {
-  console.log(`dot-lib listening on http://localhost:${info.port}`);
+const hostname = process.env.HOST || "127.0.0.1";
+const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
+  console.log(`dot-lib listening on http://${info.address}:${info.port}`);
 });
+
+// Stop accepting connections on SIGTERM/SIGINT and exit once in-flight requests
+// finish; give up after 8s so systemd's 10s stop timeout is never hit.
+const shutdown = (signal: string) => {
+  console.log(`dot-lib received ${signal}, shutting down`);
+  const deadline = setTimeout(() => process.exit(1), 8000);
+  deadline.unref();
+  server.close(() => process.exit(0));
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
