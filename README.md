@@ -89,8 +89,6 @@ DEPLOY_HOST=ubuntu@your-server ./deploy.sh
 
 服务只监听 `127.0.0.1:8787`（代码默认值，unit 里再显式给一次），公网访问由前面的一层负责：Cloudflare Tunnel、Nginx/Caddy 均可，顺便解决 HTTPS 与登录（本应用自身不带鉴权）。
 
-从旧的系统级 unit（`/etc/systemd/system/dot-lib.service`，部署目录在 `~/.awesome-agent/projects/dot-lib`）迁移：先 `sudo systemctl disable --now dot-lib && sudo rm /etc/systemd/system/dot-lib.service && sudo systemctl daemon-reload`，把旧目录的 `.env` 拷到 `~/.ai-space/apps/dot-lib/.env`（只留 `PORT`，桶和凭证由 ai-space 的 `space.env` 供给），再跑一次 `deploy.sh`。
-
 仓库里的 `Dockerfile` / `docker-compose.yml` 是另一套可选方案，当前部署没有使用；镜像里 `HOST=0.0.0.0`，端口由容器运行时发布。
 
 ## API

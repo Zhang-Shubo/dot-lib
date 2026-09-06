@@ -86,7 +86,7 @@ DEPLOY_HOST=<host> ./deploy.sh
 
 ## 已知坑
 
-- **老部署是系统级 unit**（`/etc/systemd/system/dot-lib.service`，目录 `~/.awesome-agent/projects/dot-lib`，需要 sudo）。迁到用户级 unit 的步骤在 README「部署到服务器」；两套同时启用会抢 8787 端口。
+- 老的系统级 unit 与 `~/.awesome-agent` 目录已于 2026-09-07 移除，现在只有用户级 unit。
 - `tsx` 不自动读 `.env`，本地开发要先把变量 source 进 shell。
 - `dist/client/` 是提交的，改了前端记得 `npm run build` 再提交，否则服务器拿到的是旧页面。
 - `BLOB_URL` 的 `prefix` 一旦非空，桶里已有的 `books/...` 对象就看不见了；这个 app 必须保持 `prefix: ""`。
