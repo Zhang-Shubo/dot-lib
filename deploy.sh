@@ -4,7 +4,7 @@
 #
 # Usage:
 #   DEPLOY_HOST=ubuntu@your-server ./deploy.sh
-#   DEPLOY_HOST=seoul-deploy DEPLOY_PATH=.ai-space/apps/dot-lib SERVICE=dot-lib ./deploy.sh
+#   DEPLOY_HOST=my-server DEPLOY_PATH=.ai-space/apps/dot-lib SERVICE=dot-lib ./deploy.sh
 #
 # Requirements on the server: node 22+ on /usr/bin/node and a user systemd
 # session (deploy.sh enables linger so the unit survives logout).

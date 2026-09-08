@@ -295,7 +295,8 @@ app.put("/api/books/:id/progress", async (c) => {
 // 取最近有阅读动静的 3 本书,口径与书架一致(读完 / 读至 N% / 未读)。
 // 面板服务端 60s 缓存,这里每次现算即可。
 
-const SITE_BASE = process.env.PUBLIC_BASE || "https://books.ericz.info";
+// 小组件链接的绝对前缀。留空则返回相对链接, 由 ai-space 按 space.yaml 的 url 解析。
+const SITE_BASE = process.env.PUBLIC_BASE || "";
 
 app.get("/api/widget", async (c) => {
   try {
